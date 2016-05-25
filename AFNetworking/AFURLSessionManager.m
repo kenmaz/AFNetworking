@@ -495,6 +495,8 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
 @property (readwrite, nonatomic, copy) AFURLSessionDownloadTaskDidFinishDownloadingBlock downloadTaskDidFinishDownloading;
 @property (readwrite, nonatomic, copy) AFURLSessionDownloadTaskDidWriteDataBlock downloadTaskDidWriteData;
 @property (readwrite, nonatomic, copy) AFURLSessionDownloadTaskDidResumeBlock downloadTaskDidResume;
+@property (readwrite, nonatomic, strong) id resumeObserver;
+@property (readwrite, nonatomic, strong) id suspendObserver;
 @end
 
 @implementation AFURLSessionManager
@@ -560,8 +562,7 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     return [NSString stringWithFormat:@"%p", self];
 }
 
-- (void)taskDidResume:(NSNotification *)notification {
-    NSURLSessionTask *task = notification.object;
+- (void)taskDidResume:(NSURLSessionTask*)task {
     if ([task respondsToSelector:@selector(taskDescription)]) {
         if ([task.taskDescription isEqualToString:self.taskDescriptionForSessionTasks]) {
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -571,8 +572,7 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     }
 }
 
-- (void)taskDidSuspend:(NSNotification *)notification {
-    NSURLSessionTask *task = notification.object;
+- (void)taskDidSuspend:(NSURLSessionTask*)task {
     if ([task respondsToSelector:@selector(taskDescription)]) {
         if ([task.taskDescription isEqualToString:self.taskDescriptionForSessionTasks]) {
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -734,13 +734,17 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
 
 #pragma mark -
 - (void)addNotificationObserverForTask:(NSURLSessionTask *)task {
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(taskDidResume:) name:AFNSURLSessionTaskDidResumeNotification object:task];
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(taskDidSuspend:) name:AFNSURLSessionTaskDidSuspendNotification object:task];
+    self.resumeObserver = [[NSNotificationCenter defaultCenter] addObserverForName:AFNSURLSessionTaskDidResumeNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+        [self taskDidResume:task];
+    }];
+    self.suspendObserver = [[NSNotificationCenter defaultCenter] addObserverForName:AFNSURLSessionTaskDidSuspendNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+        [self taskDidSuspend:task];
+    }];
 }
 
 - (void)removeNotificationObserverForTask:(NSURLSessionTask *)task {
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:AFNSURLSessionTaskDidSuspendNotification object:task];
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:AFNSURLSessionTaskDidResumeNotification object:task];
+    [[NSNotificationCenter defaultCenter] removeObserver:self.resumeObserver];
+    [[NSNotificationCenter defaultCenter] removeObserver:self.suspendObserver];
 }
 
 #pragma mark -
